@@ -165,8 +165,8 @@ El Looper te permite grabar tus propios ritmos golpeando los pads o tocando nota
 │   (Voz 1: Bombo/Base)  │   (Voz 2: Caja/Platos) │   (Voz 3: Melodía/Bajo)│   (Voz 4: Arreglos)    │
 ├────────────────────────┼────────────────────────┼────────────────────────┼────────────────────────┤
 │         PAD 1          │         PAD 2          │         PAD 3          │         PAD 4          │
-│  🔴 REC / ▶ PLAY /     │    ▶ / ⏸ PAUSA         │     ⏱ METRÓNOMO        │    🗑 CLEAR ALL        │  <- Fila Inferior
-│  🟠 OVERDUB (Multiuso) │  (Pausa / Reanuda)     │   (Activa/Mutea click) │  (Borra las 4 pistas)  │
+│  🔴 REC / ▶ PLAY /     │    ▶ / ⏸ PAUSA         │     ⏱ METRÓNOMO        │   ↩ UNDO / ↪ REDO /    │  <- Fila Inferior
+│  🟠 OVERDUB (Multiuso) │  (Pausa / Reanuda)     │   (Activa/Mutea click) │   🗑 CLEAR ALL (Hold)  │
 └────────────────────────┴────────────────────────┴────────────────────────┴────────────────────────┘
 ```
 
@@ -177,7 +177,8 @@ El Looper te permite grabar tus propios ritmos golpeando los pads o tocando nota
 2. **🔴 Inicio Instantáneo por Primera Nota (Filosofía C):**
    - En cuanto tocas tu **primera nota de piano o golpe de pad**, suena un chime agudo y **la grabación arranca exactamente en ese instante como Tiempo 0**.
    - Cero huecos vacíos ni silencios de desfase.
-3. **▶ Cierre Inteligente con Redondeo Amigable:**
+   - **Nota de seguridad**: Las teclas modificadoras (`D1` y `D#1`) nunca son grabadas en el loop ni disparan la grabación.
+3. **▶ Cierre Inteligente con Redondeo a 1 Compás Completo:**
    - Cuando termines tu frase (1, 2, 4 u 8 compases), pulsa **`PAD 1`**.
    - Si pulsas un poco después de la última nota (hasta medio compás de margen de tolerancia), el sistema **redondea inteligentemente al compás final de tu frase** y arranca el loop inmediatamente en reproducción continua.
    - **Nunca se quedará esperando otro compás entero en silencio**.
@@ -185,16 +186,19 @@ El Looper te permite grabar tus propios ritmos golpeando los pads o tocando nota
 4. **🟠 Añadir Capas 2, 3 y 4 (Overdub alternado con Pad 1):**
    - Pulsa **`PAD 1`** mientras suena el bucle: entrarás en grabación sincronizada de la siguiente capa disponible (Capas 2, 3 o 4).
    - Toca encima y vuelve a pulsar **`PAD 1`** para cerrar la capa y volver a PLAY.
-5. **🔊 / 🔇 Silenciar o Borrar Capas Individuales (Pads 5, 6, 7 y 8):**
+5. **↩ Deshacer / ↪ Rehacer / 🗑 Borrar Todo (`D1 + PAD 4`):**
+   - **Pulsación simple (Tap corto)**: **Undo** (deshace la última toma o sobregrabación con chime descendente Sol->Mi).
+   - **Doble pulsación rápida (Doble Tap <0.45s)**: **Redo** (rehace la toma deshecha con chime ascendente Mi->Sol).
+   - **Pulsación mantenida (> 1.5 segundos)**: **Clear All** (borra las 4 pistas y reinicia el bucle con chime de reset).
+6. **🔊 / 🔇 Silenciar o Borrar Capas Individuales (Pads 5, 6, 7 y 8):**
    - **Pulsación corta**: Conmuta Silenciar (Mute / chime grave tenue) o Activar (Unmute / chime agudo brillante) de esa capa específica.
      - `PAD 5`: Capa 1 (Base).
      - `PAD 6`: Capa 2.
      - `PAD 7`: Capa 3.
      - `PAD 8`: Capa 4.
    - **Pulsación larga (> 1.0 segundo)**: Borra por completo los datos de esa capa individual (suena chime de disolución y la capa queda vacía y lista para volver a ser grabada).
-6. **⏸ Pausar / Reanudar (Pad 2):** Pausa sin perder ninguna pista.
-7. **⏱ Metrónomo On/Off (Pad 3):** Activa o silencia el click de claqueta.
-8. **🗑 Borrar Todo (Pad 4):** Limpia las 4 pistas de memoria para empezar una nueva sesión desde cero (suena chime de reset).
+7. **⏸ Pausar / Reanudar (Pad 2):** Pausa sin perder ninguna pista.
+8. **⏱ Metrónomo On/Off (Pad 3):** Activa o silencia el click de claqueta en canal aislado (Canal 15), independiente del volumen de batería.
 9. **⏱ Control de Tempo en Vivo (`KNOB 3`):** Gira la perilla K3 para cambiar la velocidad del bucle en tiempo real entre 30 y 210 BPM.
 
 ---

@@ -142,6 +142,8 @@ class LiveMidiLooper:
         self.last_key_note_times: list = []
         self.detected_arp_bpm: Optional[int] = None
         self.last_arp_detected_time: float = 0.0
+        self.undo_stack: list = []
+        self.redo_stack: list = []
 
         # 7 Preset groove templates for instant jamming (Pads 1 to 7)
         self.preset_idx: Optional[int] = None
@@ -323,6 +325,7 @@ class LiveMidiLooper:
 
         elif self.state == "PLAYING":
             # ENTER OVERDUB MODE (Buscar la siguiente capa libre entre 2, 3 y 4)
+            self._push_history()
             next_trk = None
             for idx in range(1, 4):
                 if len(self.tracks[idx]) == 0:
@@ -391,11 +394,11 @@ class LiveMidiLooper:
             if self.stop_event.is_set() or self.state not in ["ARMED", "RECORDING"]:
                 break
 
-            # Sonido de claqueta durante ARMED y RECORDING
+            # Sonido de claqueta durante ARMED y RECORDING en Canal 15 (Independiente del bus de batería)
             if self.metronome_active:
                 click_note = 76 if (beat_idx % 4 == 0) else 77
-                click_vel = 100 if (beat_idx % 4 == 0) else 65
-                self.fluid.send(f"noteon 9 {click_note} {click_vel}")
+                click_vel = 105 if (beat_idx % 4 == 0) else 70
+                self.fluid.send(f"prog 15 115\ncc 15 7 115\nnoteon 15 {click_note} {click_vel}\n")
 
             beat_idx += 1
 
@@ -437,8 +440,57 @@ class LiveMidiLooper:
             print("\n[LOOPER ▶ PLAY] Bucle reanudado.", flush=True)
             self._play_chime("play")
 
+    def _push_history(self):
+        # Save snapshot of all 4 tracks for undo
+        snapshot = [list(trk) for trk in self.tracks]
+        self.undo_stack.append(snapshot)
+        if len(self.undo_stack) > 10:
+            self.undo_stack.pop(0)
+        self.redo_stack.clear()
+
+    def undo(self) -> bool:
+        with self.lock:
+            if not self.undo_stack:
+                print("\n[LOOPER ↩ UNDO] No hay más acciones para deshacer.", flush=True)
+                return False
+            # Save current state into redo stack
+            current_state = [list(trk) for trk in self.tracks]
+            self.redo_stack.append(current_state)
+            previous_state = self.undo_stack.pop()
+            self.tracks = [list(trk) for trk in previous_state]
+            # If all tracks empty, stop loop
+            if all(len(trk) == 0 for trk in self.tracks):
+                self.stop_internal()
+                self.state = "IDLE"
+                self.loop_duration = 0.0
+
+        # Cut any active notes cleanly
+        self.fluid.send("cc 0 123 0\ncc 9 123 0")
+        print("\n[LOOPER ↩ UNDO] Última capa/toma deshecha con éxito.", flush=True)
+        self._play_chime("undo")
+        return True
+
+    def redo(self) -> bool:
+        with self.lock:
+            if not self.redo_stack:
+                print("\n[LOOPER ↪ REDO] No hay acciones para rehacer.", flush=True)
+                return False
+            # Save current into undo stack
+            current_state = [list(trk) for trk in self.tracks]
+            self.undo_stack.append(current_state)
+            next_state = self.redo_stack.pop()
+            self.tracks = [list(trk) for trk in next_state]
+            if self.state == "IDLE" and self.loop_duration > 0:
+                self.state = "PLAYING"
+                self._start_playback_thread()
+
+        print("\n[LOOPER ↪ REDO] Capa/toma recuperada con éxito.", flush=True)
+        self._play_chime("redo")
+        return True
+
     def clear(self):
         with self.lock:
+            self._push_history()
             self.stop_internal()
             for i in range(4):
                 self.tracks[i].clear()
@@ -565,8 +617,8 @@ class LiveMidiLooper:
                 break
             if self.metronome_active:
                 click_note = 76 if (beat_idx % 4 == 0) else 77
-                click_vel = 100 if (beat_idx % 4 == 0) else 70
-                self.fluid.send(f"noteon 9 {click_note} {click_vel}")
+                click_vel = 105 if (beat_idx % 4 == 0) else 70
+                self.fluid.send(f"prog 15 115\ncc 15 7 115\nnoteon 15 {click_note} {click_vel}\n")
             beat_idx += 1
 
     def _run_playback(self):
@@ -678,6 +730,20 @@ class LiveMidiLooper:
                     self.fluid.send("noteoff 15 64\nnoteon 15 52 75\n")
                     time.sleep(0.12)
                     self.fluid.send("noteoff 15 52\n")
+                elif kind == "undo":
+                    # Chime suave descendente de acción deshecha (Sol -> Mi)
+                    self.fluid.send("noteon 15 79 80\n")
+                    time.sleep(0.06)
+                    self.fluid.send("noteoff 15 79\nnoteon 15 76 75\n")
+                    time.sleep(0.08)
+                    self.fluid.send("noteoff 15 76\n")
+                elif kind == "redo":
+                    # Chime ascendente brillante de acción recuperada (Mi -> Sol)
+                    self.fluid.send("noteon 15 76 80\n")
+                    time.sleep(0.06)
+                    self.fluid.send("noteoff 15 76\nnoteon 15 79 85\n")
+                    time.sleep(0.08)
+                    self.fluid.send("noteoff 15 79\n")
                 elif kind == "clear":
                     self.fluid.send("noteon 15 64 75\n")
                     time.sleep(0.08)
@@ -715,6 +781,7 @@ class AdvancedAkaiController:
         self.lowest_base_c: Optional[int] = 48  # C1 físico por defecto en MPK Mini
         self.looper_pad_press_times: Dict[int, float] = {}
         self.looper_pad_hold_timers: Dict[int, threading.Timer] = {}
+        self.last_undo_tap_time: float = 0.0
         self.looper = LiveMidiLooper(fluid)
         # Enable FluidSynth effects engines & set responsive velocity curve
         fluid.send("reverb on\nchorus on\n")
@@ -923,8 +990,20 @@ class AdvancedAkaiController:
             self.looper.toggle_play_pause()
         elif pad_num == 2:  # Pad 3: Metronome Toggle (Mute/Unmute)
             self.looper.toggle_metronome()
-        elif pad_num == 3:  # Pad 4: Borrar todo el bucle
-            self.looper.clear()
+        elif pad_num == 3:  # Pad 4: Undo (tap) / Redo (doble tap) / Borrar todo el bucle (mantener > 1.5s)
+            now = time.time()
+            dt = now - self.last_undo_tap_time
+            self.last_undo_tap_time = now
+
+            def _clear_all_action():
+                self.looper.clear()
+                self.looper_pad_press_times.pop(pad_num, None)
+
+            timer = threading.Timer(1.5, _clear_all_action)
+            timer.daemon = True
+            self.looper_pad_hold_timers[pad_num] = timer
+            timer.start()
+
         elif pad_num in [4, 5, 6, 7]:  # Pads 5..8: Capas 1..4
             trk_idx = pad_num - 4
             # Programar temporizador de pulsación larga (> 1.0s) para borrado de capa
@@ -939,16 +1018,27 @@ class AdvancedAkaiController:
             timer.start()
 
     def trigger_looper_pad_release(self, pad_num: int):
-        # Cancelar timer de borrado si se suelta antes de 1.0s
+        # Cancelar timer de borrado si se suelta antes de cumplirse
         timer = self.looper_pad_hold_timers.pop(pad_num, None)
         if timer is not None:
             timer.cancel()
 
         press_t = self.looper_pad_press_times.pop(pad_num, None)
-        if press_t is not None and pad_num in [4, 5, 6, 7]:
-            # Pulsación corta (< 1.0s): Conmutar Silenciar / Activar (Mute Toggle)
-            trk_idx = pad_num - 4
-            self.looper.toggle_track_mute(trk_idx)
+        if press_t is not None:
+            if pad_num == 3:
+                # Pulsación corta en Pad 4:
+                # Si se pulsó 2 veces en menos de 0.45s -> Redo
+                # Si es pulsación simple -> Undo
+                now = time.time()
+                if (now - self.last_undo_tap_time) < 0.45 and (press_t - getattr(self, '_prev_pad4_release', 0)) < 0.45:
+                    self.looper.redo()
+                else:
+                    self.looper.undo()
+                self._prev_pad4_release = now
+            elif pad_num in [4, 5, 6, 7]:
+                # Pulsación corta (< 1.0s): Conmutar Silenciar / Activar (Mute Toggle)
+                trk_idx = pad_num - 4
+                self.looper.toggle_track_mute(trk_idx)
 
     def trigger_preset_pad(self, pad_num: int):
         if 0 <= pad_num < len(self.looper.preset_patterns):  # Pads 1..8: 8 Ritmos Pregrabados
@@ -1056,7 +1146,10 @@ class AdvancedAkaiController:
             self.looper.register_key_note(note)
 
             # Grabar notas de teclado en el Looper (incluso si está en ARMED para disparar la grabación):
-            if self.looper.state in ["ARMED", "RECORDING", "OVERDUBBING"]:
+            # IMPORTANTE: Las teclas modificadoras (D1 = semitono 2 para Looper, D#1 = semitono 3 para Presets)
+            # NUNCA deben grabarse en el loop ni disparar la grabación durante modo ARMED.
+            is_modifier_key = ((note % 12) == 2) or ((note % 12) == 3)
+            if not is_modifier_key and self.looper.state in ["ARMED", "RECORDING", "OVERDUBBING"]:
                 self.looper.record_event(0, note, velocity, True)
 
         # Si se tocan los pads (Canal 10 / index 9 en FluidSynth):
@@ -1119,7 +1212,8 @@ class AdvancedAkaiController:
                 if timer:
                     timer.cancel()
             # Grabar liberación de tecla para mantener duración exacta de notas
-            if self.looper.state in ["RECORDING", "OVERDUBBING"]:
+            is_modifier_key = ((note % 12) == 2) or ((note % 12) == 3)
+            if not is_modifier_key and self.looper.state in ["RECORDING", "OVERDUBBING"]:
                 self.looper.record_event(0, note, 0, False)
         elif channel == 9:
             pad_num = (note - 36) % 8 if note < 44 else (note - 44) % 8
@@ -1170,6 +1264,7 @@ class AdvancedAkaiController:
 
             elif knob_idx == 3:  # K4: Drum & Looper Volume Balance (Volumen Mezcla Batería)
                 self.current_drum_volume = value
+                # Paridad total de volumen: Canal 10 (batería) escala directamente a CC 7 en paridad con el teclado
                 fluid.send(f"cc 9 7 {value}")
                 print(f"[KNOB 4 - BATERÍA] Volumen Mezcla Batería/Loop: {int((value/127)*100)}%", flush=True)
 
@@ -1212,8 +1307,10 @@ class AdvancedAkaiController:
                     print(f"[KNOB 7 - REVERB PIANO] Profundidad Reverb: {int(rev_lvl*100)}% (Room {room:.2f})", flush=True)
 
             elif knob_idx == 7:  # K8: Master Volume (Volumen General)
+                # Calibración profesional de ganancia:
+                # 0% = 0.0, 50% = 0.60, 85% = 1.0 (Ganancia Unitaria 0 dBFS), 100% = 1.25 (+2 dB boost con soft-clipping)
                 norm = value / 127.0
-                gain = (norm ** 1.7) * 1.05
+                gain = (norm ** 1.35) * 1.25
                 fluid.send(f"gain {gain:.2f}")
                 print(f"[KNOB 8 - MASTER] Volumen General: {int(norm * 100)}% (Gain {gain:.2f})", flush=True)
 

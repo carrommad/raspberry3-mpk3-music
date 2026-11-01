@@ -1,5 +1,6 @@
 # Akai MPK Mini & Roland S-1 Synth Controller
 > **Target:** `scripts/akai_controller.py`
+- 2026-11-01 23:10: Implemented professional looper upgrades: unity gain staging (-g 1.0, master boost ceiling 1.25), parallel drum/keys CC volume parity, isolated Channel 15 metronome, D1/D#1 modifier note leak protection, 1-bar phrase quantization, and multi-level Undo/Redo/Clear All on D1+Pad 4. Deployed to Pi and restarted synth.service. [Done]
 - 2026-11-01 22:48: Verified path references across scripts in /home/cromero/raspberry-mk2/scripts/, confirmed no hardcoded root scripts or PWD dependencies, and verified synth.service clean restart. [Done]
 - 2026-10-25 14:20: Added Synth Bass 1 (808 Sub) and Synth Bass 2 (Acid 303) to the continuous instruments list, ensuring all 24 instruments either naturally fade out or are bounded by Knob 7's 3s-30s auto-decay timer without infinite droning. [Done]
 - 2026-10-25 14:02: Unified keyboard hold timers at 2.0s (C1 melodic select, C#1 drum select, C1+C#1 full level, C1+C3 shutdown) with confirmation chime, fixed missing `cancel_full_level_timer` method, and added momentary CC 64 0->127 cycle on decay timeout so SoundFont trumpets/organs terminate cleanly without infinite ringing. [Done]
