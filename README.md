@@ -159,3 +159,15 @@ midi-to-synth/
     ├── favicon.svg                # Favicon estilizado Roland S-1
     └── run.sh                     # Lanzador de servidor local
 ```
+
+
+---
+
+---
+
+## 🔒 Seguridad de Red y Control del Motor (Puerto 9800)
+
+FluidSynth abre un shell interactivo de control en el puerto TCP `9800`. Para evitar accesos no autorizados desde la red local (Wi-Fi), el puerto está aislado a nivel de kernel mediante reglas persistentes de `iptables`:
+- **Tráfico local (Loopback / `127.0.0.1`):** `ACCEPT` (usado por `start-synth.sh` y scripts internos de control).
+- **Tráfico externo (Wi-Fi / LAN):** `DROP` (bloquea cualquier sondeo o comando entrante desde la red doméstica).
+- **Persistencia:** Gestionado por `netfilter-persistent` (`/etc/iptables/rules.v4`).
